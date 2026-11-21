@@ -41,8 +41,10 @@ def find_corpus() -> tuple[Path | None, list[Path]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="retrieval_app", description=__doc__)
-    parser.add_argument("question", help="the question to answer")
-    parser.add_argument("-k", type=int, default=3, help="how many chunks to retrieve (default: 3)")
+    parser.add_argument("caregiver_input", help="the caregiver input to map")
+    parser.add_argument("child_age", help="the age of the child")
+    # parser.add_argument("-k", type=int, default=3, help="how many chunks to retrieve (default: 3)") -- Before change.
+    parser.add_argument("-k", type=int, default=5, help="how many chunks to retrieve (default: 5)") # After change.
     parser.add_argument("--corpus", type=Path, default=None, help="the .txt file to search (default: the one in data/)")
     parser.add_argument("--show-chunks", action="store_true", help="print the retrieved text, not just the citations")
     args = parser.parse_args(argv)
@@ -73,19 +75,23 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
 
     text = corpus_stage.load_corpus(corpus_path)
-    chunks = corpus_stage.split_corpus(text)
+    #chunks = corpus_stage.split_corpus(text) -- Before change.
+    chunks = corpus_stage.split_corpus_structure_aware(text) # After change.
     # Both numbers are printed on purpose. Your chunk count is checkable from
     # the character count: see "Does my splitter work?" in the README.
     print(f"corpus {corpus_path.name}: {len(text):,} characters -> {len(chunks)} chunks", file=sys.stderr, flush=True)
 
-    matrix = index_stage.build_index(chunks)
+    matrix, metadata = index_stage.build_index(chunks)
     indexed = time.perf_counter()
     print(f"indexed in {indexed - started:.2f}s", file=sys.stderr, flush=True)
 
-    hits = index_stage.search(args.question, chunks, matrix, k=args.k)
-    reply = answer_stage.answer(args.question, hits)
+    # hits =index_stage.search(args.caregiver_input, args.child_age, chunks, metadata, matrix, k=args.k) -- Before change.
+    hits = index_stage.search_intake_agent(args.caregiver_input, args.child_age, chunks, metadata, matrix, k=args.k) # After change.
+    reply = answer_stage.answer_intake_agent(args.caregiver_input, args.child_age, hits)
 
-    print(f"\nQ: {args.question}\n")
+
+    print(f"\nQ: {args.caregiver_input}\n")
+    print(f"\nQ: {args.child_age}\n")
     print(reply)
 
     # Every answer names its sources. This is not decoration: an answer a user
@@ -94,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     if not hits:
         print("  (none retrieved)")
     for hit in hits:
-        print(f"  {hit.citation()}")
+        print(f"  {hit.citation()}\n\n")
         if args.show_chunks:
             print(f"      {' '.join(hit.text.split())[:400]}...")
 
